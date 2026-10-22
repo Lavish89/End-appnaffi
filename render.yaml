@@ -1,0 +1,51 @@
+# Render-Blueprint für Goalsforce – in Render: New → Blueprint → dieses Repository wählen.
+# Wichtig: Der dauerhafte Speicher (disk) funktioniert nur mit einem bezahlten Instanztyp,
+# nicht mit dem Free-Plan. Ohne Disk gehen Konten und Daten bei jedem Neustart verloren.
+services:
+  - type: web
+    name: goalsforce
+    runtime: node
+    region: frankfurt
+    buildCommand: npm install --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    disk:
+      name: goalsforce-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATA_DIR
+        value: /var/data
+      - key: OWNER_EMAIL
+        value: dragosserbu6@gmail.com
+      - key: ALLOW_REGISTRATION
+        value: "true"
+      # Öffentliche Adresse, z. B. https://goalsforce.onrender.com oder deine eigene Domain
+      - key: APP_URL
+        sync: false
+      # KI-Texte (Google AI Studio → API-Schlüssel)
+      - key: GEMINI_API_KEY
+        sync: false
+      # Bezahlung (optional, später nachtragen)
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      # E-Mails (optional)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      # Login mit Google / Facebook (optional)
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false

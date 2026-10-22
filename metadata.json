@@ -1,0 +1,8 @@
+{
+  "name": "Goalsforce Agent - Shopify & Home-Gym Business",
+  "description": "Autonomer Shopify Business Agent für Home-Gym und Regeneration in kleinen Wohnungen (goalsforce.store). Deckungsbeitrags-Kalkulation, DSers, Affiliate & Omnichannel-Marketing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
