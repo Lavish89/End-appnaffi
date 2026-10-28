@@ -10,7 +10,7 @@ import { installBilling } from './server-billing';
 import { installOAuth } from './server-oauth';
 import { createMailer } from './server-mail';
 import { installCommunity } from './server-community';
-import { createKV } from './server-kv';
+import { createKV, kvReady, usingPostgres } from './server-kv';
 
 dotenv.config();
 
@@ -1686,6 +1686,10 @@ async function startServer() {
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
+
+  // Postgres-Speicher: Caches vorab laden, bevor Anfragen bedient werden.
+  await kvReady();
+  console.log(`[Storage] ${usingPostgres() ? 'Postgres (DATABASE_URL) aktiv' : 'Datei-Speicher (kein DATABASE_URL)'}`);
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Autonomous Shopify Agent Server] running on http://0.0.0.0:${PORT}`);

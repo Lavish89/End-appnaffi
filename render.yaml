@@ -30,6 +30,11 @@ services:
       # KI-Texte (Google AI Studio → API-Schlüssel)
       - key: GEMINI_API_KEY
         sync: false
+      # Postgres (optional, z. B. kostenloses Neon/Supabase).
+      # Gesetzt → Community/KV-Daten bleiben erhalten, auch ohne bezahlten Datenträger.
+      # Für echten Free-Plan: oben den "disk"-Block entfernen und hier DATABASE_URL setzen.
+      - key: DATABASE_URL
+        sync: false
       # Bezahlung (optional, später nachtragen)
       - key: STRIPE_SECRET_KEY
         sync: false
