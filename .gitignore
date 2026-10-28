@@ -7,5 +7,5 @@ coverage/
 .env*
 !.env.example
 
-# Nutzerkonten (enthalten Passwort-Hashes)
-data/
+# Nutzerkonten (enthalten Passwort-Hashes) – nur der oberste data-Ordner, NICHT src/data
+/data/
