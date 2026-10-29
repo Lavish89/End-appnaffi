@@ -36,7 +36,7 @@ app.use((_req, res, next) => {
 app.set('trust proxy', 1);
 const dataDir = process.env.DATA_DIR || path.resolve(__dirname, 'data');
 const mailer = createMailer(dataDir);
-const auth = installAuth(app, { dataDir, isProd, mailer });
+const auth = installAuth(app, { dataDir, isProd, mailer, store: createKV(path.join(dataDir, 'auth')) });
 // Anmelden mit Google / Facebook (nur wenn in .env eingerichtet)
 installOAuth(app, auth);
 // Affiliate-Hub: Daten pro Nutzer, Kurzlinks /go/... mit Klickzaehlung
@@ -1754,6 +1754,8 @@ async function startServer() {
 
   // Postgres-Speicher: Caches vorab laden, bevor Anfragen bedient werden.
   await kvReady();
+  // Konten aus dem jetzt vorbereiteten Speicher einlesen (bei Postgres bleiben sie so erhalten).
+  auth.reload();
   console.log(`[Storage] ${usingPostgres() ? 'Postgres (DATABASE_URL) aktiv' : 'Datei-Speicher (kein DATABASE_URL)'}`);
 
   app.listen(PORT, '0.0.0.0', () => {

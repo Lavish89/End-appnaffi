@@ -10,6 +10,7 @@ import { validateRegistration, roleFor, DEFAULT_OWNER_EMAIL, isOwner, cleanProfi
 import { installAdmin } from './server-admin';
 import { effectivePlan, PlanId, PlanStatus, Interval } from './src/billing/plans';
 import type { Mailer } from './server-mail';
+import type { KV } from './server-community';
 
 export { validateRegistration };
 
@@ -82,29 +83,38 @@ export interface AuthApi {
   startSession: (res: Response, userId: string) => void;
   ownerEmail: string;
   isProd: boolean;
+  // Konten/Einstellungen neu aus dem Speicher laden (z. B. nachdem der Postgres-Cache bereit ist).
+  reload: () => void;
 }
 
-export function installAuth(app: Express, opts: { dataDir: string; isProd: boolean; mailer: Mailer }): AuthApi {
+export function installAuth(app: Express, opts: { dataDir: string; isProd: boolean; mailer: Mailer; store?: KV }): AuthApi {
   const file = path.join(opts.dataDir, 'users.json');
   const settingsFile = path.join(opts.dataDir, 'settings.json');
+  const store = opts.store;
   const ownerEmail = (process.env.OWNER_EMAIL ?? DEFAULT_OWNER_EMAIL).trim().toLowerCase();
   const appUrl = process.env.APP_URL || '';
-  let settings: { registrationOpen: boolean } = { registrationOpen: process.env.ALLOW_REGISTRATION !== 'false' };
-  try {
-    settings = { ...settings, ...JSON.parse(fs.readFileSync(settingsFile, 'utf8')) };
-  } catch { /* noch keine Einstellungen gespeichert */ }
+
+  // Speicher: mit store (Postgres via DATABASE_URL) bleiben Konten erhalten; sonst Datei-Fallback
+  // (auf Free-Hosting fluechtig). Die Schnittstelle (get/set) ist in beiden Faellen gleich.
+  const defaultSettings = { registrationOpen: process.env.ALLOW_REGISTRATION !== 'false' };
+  const loadSettings = (): { registrationOpen: boolean } => {
+    if (store) return { ...defaultSettings, ...store.get<{ registrationOpen?: boolean }>('auth_settings', {}) };
+    try { return { ...defaultSettings, ...JSON.parse(fs.readFileSync(settingsFile, 'utf8')) }; } catch { return { ...defaultSettings }; }
+  };
+  let settings = loadSettings();
   const saveSettings = () => {
+    if (store) { store.set('auth_settings', settings); return; }
     fs.mkdirSync(opts.dataDir, { recursive: true });
     fs.writeFileSync(settingsFile, JSON.stringify(settings), { mode: 0o600 });
   };
 
-  let users: StoredUser[] = [];
-  try {
-    users = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    users = [];
-  }
+  const loadUsers = (): StoredUser[] => {
+    if (store) return store.get<StoredUser[]>('auth_users', []);
+    try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return []; }
+  };
+  let users: StoredUser[] = loadUsers();
   const save = () => {
+    if (store) { store.set('auth_users', users); return; }
     fs.mkdirSync(opts.dataDir, { recursive: true });
     fs.writeFileSync(file, JSON.stringify(users, null, 2), { mode: 0o600 });
   };
@@ -116,6 +126,12 @@ export function installAuth(app: Express, opts: { dataDir: string; isProd: boole
       return true;
     }
     return false;
+  };
+  // Nach dem Vorab-Laden des (Postgres-)Caches erneut einlesen und Owner-Rechte sicherstellen.
+  const reload = () => {
+    users = loadUsers();
+    settings = loadSettings();
+    if (users.map(ensureOwner).some(Boolean)) save();
   };
   if (users.map(ensureOwner).some(Boolean)) save();
 
@@ -344,5 +360,6 @@ export function installAuth(app: Express, opts: { dataDir: string; isProd: boole
     startSession,
     ownerEmail,
     isProd: opts.isProd,
+    reload,
   };
 }
