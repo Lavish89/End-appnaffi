@@ -37,7 +37,7 @@ services:
       # Erzwingt Anbieter: groq | openrouter | gemini (leer = automatisch).
       - key: AI_PROVIDER
         sync: false
-      # Optionales Modell (Standard Groq: llama-3.3-70b-versatile).
+      # Optionales Modell (Standard Groq: qwen/qwen3.8-27b).
       - key: AI_MODEL
         sync: false
       # KI-Texte via Google Gemini (optional – Gratis-Tarif nur 20 Anfragen/Tag).

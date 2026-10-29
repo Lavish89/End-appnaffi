@@ -116,7 +116,7 @@ function buildAiClient(): AiClient | null {
     const baseUrl =
       process.env.AI_BASE_URL || (isOpenRouter ? 'https://openrouter.ai/api/v1' : 'https://api.groq.com/openai/v1');
     const model =
-      process.env.AI_MODEL || (isOpenRouter ? 'meta-llama/llama-3.3-70b-instruct:free' : 'llama-3.3-70b-versatile');
+      process.env.AI_MODEL || (isOpenRouter ? 'meta-llama/llama-3.3-70b-instruct:free' : 'qwen/qwen3.8-27b');
     return {
       provider: isOpenRouter ? 'openrouter' : 'groq',
       model,
