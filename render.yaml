@@ -27,7 +27,20 @@ services:
       # Öffentliche Adresse, z. B. https://goalsforce.onrender.com oder deine eigene Domain
       - key: APP_URL
         sync: false
-      # KI-Texte (Google AI Studio → API-Schlüssel)
+      # --- KI-Anbieter (einer reicht). Empfohlen gratis & hohes Limit: Groq ---
+      # Kostenloser Key: https://console.groq.com  → hier in Render eintragen (nicht im Chat).
+      - key: GROQ_API_KEY
+        sync: false
+      # Alternative: OpenRouter (openrouter.ai) – ebenfalls kostenlose Modelle.
+      - key: OPENROUTER_API_KEY
+        sync: false
+      # Erzwingt Anbieter: groq | openrouter | gemini (leer = automatisch).
+      - key: AI_PROVIDER
+        sync: false
+      # Optionales Modell (Standard Groq: llama-3.3-70b-versatile).
+      - key: AI_MODEL
+        sync: false
+      # KI-Texte via Google Gemini (optional – Gratis-Tarif nur 20 Anfragen/Tag).
       - key: GEMINI_API_KEY
         sync: false
       # Postgres (optional, z. B. kostenloses Neon/Supabase).

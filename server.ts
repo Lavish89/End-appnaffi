@@ -84,26 +84,92 @@ app.use(['/api/gemini', '/api/ai-agents'], (req, res, next) => {
 const clip = (v: unknown, max = 2000): string =>
   typeof v === 'string' ? v.slice(0, max) : v == null ? '' : String(v).slice(0, max);
 
-// Initialize Google GenAI if key is present
-const apiKey = process.env.GEMINI_API_KEY;
-let ai: GoogleGenAI | null = null;
-
-if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
-  ai = new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
+// ---------------------------------------------------------------------------
+// Einheitliche KI-Schicht: funktioniert mit einem KOSTENLOSEN Anbieter mit hohem
+// Limit (Groq / OpenRouter, OpenAI-kompatibel) ODER mit Google Gemini.
+// Die Aufrufform bleibt gleich: ai.models.generateContent({ model, contents, config }) -> { text }.
+// So kleben die Module nicht mehr am Gemini-Gratis-Limit (20 Anfragen/Tag).
+// Reihenfolge der Auswahl (AI_PROVIDER überschreibt): vorhandener Groq/OpenRouter-Key > Gemini > Heuristik-Fallback.
+// ---------------------------------------------------------------------------
+type GenArgs = { model?: string; contents: string; config?: { responseMimeType?: string } };
+interface AiClient {
+  provider: string;
+  model: string;
+  models: { generateContent(args: GenArgs): Promise<{ text: string }> };
 }
+
+function buildAiClient(): AiClient | null {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const oaiKey = process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY;
+  const explicit = (process.env.AI_PROVIDER || '').toLowerCase();
+
+  // "auto": bevorzugt den kostenlosen Anbieter mit hohem Limit, sobald ein Key da ist.
+  const useOai =
+    explicit === 'groq' || explicit === 'openrouter' || explicit === 'openai'
+      ? true
+      : explicit === 'gemini'
+      ? false
+      : Boolean(oaiKey);
+
+  if (useOai && oaiKey) {
+    const isOpenRouter = Boolean(process.env.OPENROUTER_API_KEY) && explicit !== 'groq';
+    const baseUrl =
+      process.env.AI_BASE_URL || (isOpenRouter ? 'https://openrouter.ai/api/v1' : 'https://api.groq.com/openai/v1');
+    const model =
+      process.env.AI_MODEL || (isOpenRouter ? 'meta-llama/llama-3.3-70b-instruct:free' : 'llama-3.3-70b-versatile');
+    return {
+      provider: isOpenRouter ? 'openrouter' : 'groq',
+      model,
+      models: {
+        async generateContent({ contents, config }: GenArgs) {
+          const body: any = {
+            model,
+            messages: [{ role: 'user', content: contents }],
+            temperature: 0.7,
+          };
+          if (config?.responseMimeType === 'application/json') body.response_format = { type: 'json_object' };
+          const r = await fetch(`${baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${oaiKey}` },
+            body: JSON.stringify(body),
+          });
+          if (!r.ok) throw new Error(`KI-Anbieter ${r.status}: ${(await r.text()).slice(0, 300)}`);
+          const data: any = await r.json();
+          return { text: data?.choices?.[0]?.message?.content || '' };
+        },
+      },
+    };
+  }
+
+  if (geminiKey && geminiKey !== 'MY_GEMINI_API_KEY') {
+    const sdk = new GoogleGenAI({ apiKey: geminiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
+    const model = process.env.AI_MODEL || 'gemini-3.8-flash';
+    return {
+      provider: 'gemini',
+      model,
+      models: {
+        async generateContent({ contents, config }: GenArgs) {
+          const response = await sdk.models.generateContent({ model, contents, config });
+          return { text: response.text || '' };
+        },
+      },
+    };
+  }
+
+  return null;
+}
+
+const ai = buildAiClient();
+if (ai) console.log(`[ai] Anbieter aktiv: ${ai.provider} (Modell: ${ai.model})`);
+else console.log('[ai] Kein KI-Schlüssel gesetzt – heuristische Fallbacks aktiv.');
 
 // Health check
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     hasGeminiKey: Boolean(ai),
+    aiProvider: ai?.provider || 'none',
+    aiModel: ai?.model || null,
     // Shopify, Bestellungen, Affiliates und Werbe-Autopilot sind simuliert (keine echten API-Aufrufe)
     demoMode: true,
     timestamp: new Date().toISOString(),
@@ -159,7 +225,7 @@ Gib deine fundierte Analyse strukturiert als JSON zurück mit folgenden Feldern:
     const parsed = JSON.parse(response.text || '{}');
     return res.json({
       success: true,
-      source: 'gemini_3.8_flash',
+      source: ai?.model || 'ai',
       data: parsed,
     });
   } catch (err: any) {
@@ -219,7 +285,7 @@ Antworte als JSON mit:
     const parsed = JSON.parse(response.text || '{}');
     return res.json({
       success: true,
-      source: 'gemini_3.8_flash',
+      source: ai?.model || 'ai',
       data: parsed,
     });
   } catch (err: any) {
@@ -432,16 +498,15 @@ app.post('/api/ai-agents/run', async (req, res) => {
     const prompt = clip(req.body?.prompt, 4000);
     const agent = registeredAgents.find(a => a.id === agentId) || registeredAgents[0];
 
-    // If Gemini is available and agent is Gemini, use it directly
-    if (ai && agent.provider === 'google_gemini') {
+    // Wenn ein KI-Anbieter konfiguriert ist, direkt nutzen (Groq/OpenRouter/Gemini).
+    if (ai) {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
         contents: `${agent.systemPrompt}\n\nAufgabe: ${prompt}`,
       });
       return res.json({
         success: true,
         agentName: agent.name,
-        provider: agent.provider,
+        provider: ai.provider,
         output: response.text || 'Keine Antwort erhalten',
       });
     }
@@ -1567,7 +1632,7 @@ Beantworte Anfragen:
         if (response.text) {
           return res.json({
             success: true,
-            source: 'gemini_3.8_flash',
+            source: ai?.model || 'ai',
             reply: response.text,
             timestamp: new Date().toISOString(),
           });
